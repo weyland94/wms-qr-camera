@@ -23,7 +23,16 @@
     (function(){
       var params=new URLSearchParams(location.search),token=params.get('token')||'',returnOrigin=params.get('returnOrigin')||'';
       var status=document.getElementById('status'),reader=null,active=false,sending=false;
-      var validParent=/^https:\/\/(?:[a-z0-9-]+\.)?script\.googleusercontent\.com$/i.test(returnOrigin)||returnOrigin==='https://script.google.com';
+      var validParent=false;
+      try{
+        var parentUrl=new URL(returnOrigin),parentHost=parentUrl.hostname.toLowerCase();
+        validParent=parentUrl.protocol==='https:'&&(
+          parentHost==='script.google.com'||
+          parentHost==='script.googleusercontent.com'||
+          parentHost.endsWith('.script.googleusercontent.com')||
+          /^[a-z0-9-]+-script\.googleusercontent\.com$/.test(parentHost)
+        );
+      }catch(ignore){}
       function send(type,payload){if(!validParent||!window.opener||window.opener.closed)return;try{window.opener.postMessage(Object.assign({type:type,token:token},payload||{}),returnOrigin)}catch(e){}}
       function setStatus(text,isError){status.textContent=text;status.style.background=isError?'#fff0ee':'#edf5f0';status.style.color=isError?'#9b3024':'#244c3e'}
       async function stop(){if(reader&&active){try{await reader.stop()}catch(e){}active=false}if(reader){try{reader.clear()}catch(e){}}}
