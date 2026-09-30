@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#103b32">
+  <title>WMS QR Camera</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:18px;background:#f2f6f4;color:#18332c;font:16px Arial,sans-serif}.card{max-width:520px;margin:0 auto;padding:18px;border:1px solid #dce7e1;border-radius:16px;background:#fff;box-shadow:0 8px 28px #153d3212}h1{margin:0 0 8px;font-size:22px}.hint{color:#5e7069;line-height:1.5}.status{margin:14px 0;padding:12px;border-radius:10px;background:#edf5f0;color:#244c3e;line-height:1.45}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}button{min-height:46px;border:0;border-radius:10px;padding:10px 14px;background:#176b56;color:#fff;font-size:15px;font-weight:700}button.secondary{background:#e9efec;color:#243b34}button:disabled{opacity:.55}#reader{width:100%;overflow:hidden;border-radius:12px;background:#10231f}#reader video{width:100%!important;max-height:65vh;object-fit:cover}.foot{margin-top:12px;color:#73817b;font-size:12px}@media(max-width:420px){body{padding:12px}.card{padding:14px}.buttons{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>WMS QR Camera</h1>
+    <div class="hint">Point the rear camera at one product or location QR. The scanned text will be returned to the WMS tab.</div>
+    <div id="status" class="status">Tap Start camera to begin scanning.</div>
+    <div class="buttons"><button id="start" type="button">Start camera</button><button id="cancel" class="secondary" type="button">Cancel</button></div>
+    <div id="reader"></div>
+    <div class="foot">The camera page only reads the QR text. It does not read or write warehouse data.</div>
+  </main>
+  <script>
+    (function(){
+      var params=new URLSearchParams(location.search),token=params.get('token')||'',returnOrigin=params.get('returnOrigin')||'';
+      var status=document.getElementById('status'),reader=null,active=false,sending=false;
+      var validParent=false;
+      try{
+        var parentUrl=new URL(returnOrigin),parentHost=parentUrl.hostname.toLowerCase();
+        validParent=parentUrl.protocol==='https:'&&(
+          parentHost==='script.google.com'||
+          parentHost==='script.googleusercontent.com'||
+          parentHost.endsWith('.script.googleusercontent.com')||
+          /^[a-z0-9-]+-script\.googleusercontent\.com$/.test(parentHost)
+        );
+      }catch(ignore){}
+      function send(type,payload){if(!validParent||!window.opener||window.opener.closed)return;try{window.opener.postMessage(Object.assign({type:type,token:token},payload||{}),returnOrigin)}catch(e){}}
+      function setStatus(text,isError){status.textContent=text;status.style.background=isError?'#fff0ee':'#edf5f0';status.style.color=isError?'#9b3024':'#244c3e'}
+      async function stop(){if(reader&&active){try{await reader.stop()}catch(e){}active=false}if(reader){try{reader.clear()}catch(e){}}}
+      document.getElementById('start').addEventListener('click',async function(){
+        if(!token||!validParent||!window.opener){setStatus('This camera page was not opened by the WMS app. Close it and open the camera button from WMS.',true);return}
+        if(!window.Html5Qrcode||!window.Html5QrcodeSupportedFormats){setStatus('QR scanner library did not load. Check the internet connection and reload this page.',true);return}
+        this.disabled=true;setStatus('Requesting camera access…');
+        try{
+          reader=new Html5Qrcode('reader',{verbose:false,formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE]});
+          await reader.start({facingMode:'environment'},{fps:12,qrbox:{width:240,height:240},aspectRatio:1.0},async function(text){
+            if(sending)return;sending=true;setStatus('QR read. Returning it to WMS…');await stop();send('WMS_QR_RESULT',{text:String(text||'').trim()});setTimeout(function(){window.close()},150);
+          },function(){});
+          active=true;setStatus('Camera active. Hold the QR inside the scan frame.');
+        }catch(error){this.disabled=false;var reason=error&&error.name?error.name+': ':'';var detail=error&&error.message?error.message:'Camera could not start.';setStatus(reason+detail+' Check that this site is HTTPS and camera permission is allowed.',true);send('WMS_QR_ERROR',{error:reason+detail})}
+      });
+      document.getElementById('cancel').addEventListener('click',async function(){await stop();window.close()});
+      window.addEventListener('pagehide',function(){stop()});
+    })();
+  </script>
+</body>
+</html>
